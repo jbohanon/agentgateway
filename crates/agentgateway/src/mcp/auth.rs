@@ -113,7 +113,7 @@ pub(crate) fn create_auth_required_response(
 		.and_then(|u| http::uri::Uri::try_from(u).ok())
 		.and_then(|uri| {
 			let mut parts = uri.into_parts();
-			parts.path_and_query = Some(PathAndQuery::from_static(""));
+			parts.path_and_query = Some(PathAndQuery::from_static("/"));
 			Uri::from_parts(parts).ok()
 		})
 		.and_then(|uri| uri.to_string().strip_suffix("/").map(ToString::to_string))
@@ -396,6 +396,46 @@ mod tests {
 		assert_eq!(
 			request_uri_for_oauth_metadata(&req).to_string(),
 			"https://example.com/.well-known/oauth-protected-resource/mcp"
+		);
+	}
+
+	#[test]
+	fn auth_required_response_accepts_configured_resource_with_path() {
+		let req = ::http::Request::builder()
+			.uri("http://backend.internal/mcp")
+			.body(Body::empty())
+			.expect("request should build");
+		let auth = McpAuthentication {
+			issuer: "https://idp.example.com".to_string(),
+			audiences: Vec::new(),
+			provider: None,
+			resource_metadata: crate::types::agent::ResourceMetadata {
+				extra: std::collections::BTreeMap::from([(
+					"resource".to_string(),
+					serde_json::Value::String("https://gateway.example.com/base/path?debug=true".to_string()),
+				)]),
+			},
+			jwt_validator: std::sync::Arc::new(crate::http::jwt::Jwt::from_providers(
+				Vec::new(),
+				crate::http::jwt::Mode::Strict,
+				crate::http::auth::AuthorizationLocation::default(),
+			)),
+			mode: crate::types::agent::McpAuthenticationMode::Strict,
+			client_id: None,
+		};
+
+		let err = create_auth_required_response(
+			ProxyError::ProcessingString("missing token".to_string()),
+			&req,
+			&auth,
+		);
+
+		let ProxyError::McpJwtAuthenticationFailure(_, www_authenticate) = err else {
+			panic!("expected MCP auth failure");
+		};
+		assert_eq!(
+			www_authenticate,
+			"Bearer resource_metadata=\"https://gateway.example.com/.well-known/oauth-protected-resource/mcp\""
 		);
 	}
 
