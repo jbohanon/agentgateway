@@ -91,6 +91,16 @@
             "null"
           ]
         },
+        "modelCatalog": {
+          "description": "Model cost catalog sources; entries are merged in order, with later entries taking precedence.",
+          "type": [
+            "array",
+            "null"
+          ],
+          "items": {
+            "$ref": "#/$defs/ModelCatalogSource"
+          }
+        },
         "caAddress": {
           "type": [
             "string",
@@ -336,6 +346,22 @@
           "description": "Only query for AAAA (IPv6) records.",
           "type": "string",
           "const": "V6Only"
+        }
+      ]
+    },
+    "ModelCatalogSource": {
+      "description": "A source of model cost catalog data.",
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "file": {
+              "type": "string"
+            }
+          },
+          "required": [
+            "file"
+          ]
         }
       ]
     },
@@ -807,7 +833,29 @@
             }
           ]
         },
+        "minTlsVersion": {
+          "description": "Minimum supported TLS version (only TLS 1.2 and 1.3 are supported).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TLSVersion"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
         "maxTLSVersion": {
+          "description": "Maximum supported TLS version (only TLS 1.2 and 1.3 are supported).",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/TLSVersion"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "maxTlsVersion": {
           "description": "Maximum supported TLS version (only TLS 1.2 and 1.3 are supported).",
           "anyOf": [
             {
@@ -833,6 +881,24 @@
       "required": [
         "cert",
         "key"
+      ],
+      "allOf": [
+        {
+          "not": {
+            "required": [
+              "minTLSVersion",
+              "minTlsVersion"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "maxTLSVersion",
+              "maxTlsVersion"
+            ]
+          }
+        }
       ]
     },
     "LocalTLSServerMode": {
@@ -1638,9 +1704,7 @@
       "oneOf": [
         {
           "type": "string",
-          "enum": [
-            "invalid"
-          ]
+          "enum": []
         },
         {
           "description": "Service reference. Service must be defined in the top level services list.",
@@ -2031,12 +2095,6 @@
             "kind"
           ],
           "oneOf": [
-            {
-              "type": "string",
-              "enum": [
-                "invalid"
-              ]
-            },
             {
               "description": "Service reference. Service must be defined in the top level services list.",
               "type": "object",
@@ -4118,12 +4176,6 @@
       ],
       "oneOf": [
         {
-          "type": "string",
-          "enum": [
-            "invalid"
-          ]
-        },
-        {
           "description": "Service reference. Service must be defined in the top level services list.",
           "type": "object",
           "properties": {
@@ -4253,9 +4305,19 @@
           "const": "failClosed"
         },
         {
+          "description": "Deny the request with a 500 status when the rate limit service is unavailable (default).",
+          "type": "string",
+          "const": "FailClosed"
+        },
+        {
           "description": "Allow the request through when the rate limit service is unavailable.",
           "type": "string",
           "const": "failOpen"
+        },
+        {
+          "description": "Allow the request through when the rate limit service is unavailable.",
+          "type": "string",
+          "const": "FailOpen"
         }
       ]
     },
@@ -4293,12 +4355,6 @@
       ],
       "unevaluatedProperties": false,
       "oneOf": [
-        {
-          "type": "string",
-          "enum": [
-            "invalid"
-          ]
-        },
         {
           "description": "Service reference. Service must be defined in the top level services list.",
           "type": "object",
@@ -4800,12 +4856,6 @@
       },
       "oneOf": [
         {
-          "type": "string",
-          "enum": [
-            "invalid"
-          ]
-        },
-        {
           "description": "Service reference. Service must be defined in the top level services list.",
           "type": "object",
           "properties": {
@@ -5100,12 +5150,6 @@
       "unevaluatedProperties": false,
       "oneOf": [
         {
-          "type": "string",
-          "enum": [
-            "invalid"
-          ]
-        },
-        {
           "description": "Service reference. Service must be defined in the top level services list.",
           "type": "object",
           "properties": {
@@ -5265,12 +5309,6 @@
         }
       },
       "oneOf": [
-        {
-          "type": "string",
-          "enum": [
-            "invalid"
-          ]
-        },
         {
           "description": "Service reference. Service must be defined in the top level services list.",
           "type": "object",
@@ -5501,12 +5539,6 @@
       },
       "unevaluatedProperties": false,
       "oneOf": [
-        {
-          "type": "string",
-          "enum": [
-            "invalid"
-          ]
-        },
         {
           "description": "Service reference. Service must be defined in the top level services list.",
           "type": "object",
@@ -5784,12 +5816,6 @@
       "unevaluatedProperties": false,
       "oneOf": [
         {
-          "type": "string",
-          "enum": [
-            "invalid"
-          ]
-        },
-        {
           "type": "object",
           "properties": {
             "service": {
@@ -5892,6 +5918,17 @@
           },
           "required": [
             "routeGroup"
+          ]
+        },
+        {
+          "type": "object",
+          "properties": {
+            "invalid": {
+              "type": "null"
+            }
+          },
+          "required": [
+            "invalid"
           ]
         }
       ]
@@ -6575,6 +6612,11 @@
           "description": "Azure AI Foundry (project) endpoint: `{resourceName}.services.ai.azure.com`\nRequires `project_name` to construct paths like `/api/projects/{project}/openai/v1/...`",
           "type": "string",
           "const": "foundry"
+        },
+        {
+          "description": "Azure AI Foundry (project) endpoint: `{resourceName}.services.ai.azure.com`\nRequires `project_name` to construct paths like `/api/projects/{project}/openai/v1/...`",
+          "type": "string",
+          "const": "aiServices"
         }
       ]
     },
@@ -7071,12 +7113,6 @@
       "unevaluatedProperties": false,
       "oneOf": [
         {
-          "type": "string",
-          "enum": [
-            "invalid"
-          ]
-        },
-        {
           "description": "Service reference. Service must be defined in the top level services list.",
           "type": "object",
           "properties": {
@@ -7184,6 +7220,18 @@
               "type": "null"
             }
           ]
+        },
+        "authorization": {
+          "description": "Authorization rules for incoming HTTP requests.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Authorization"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "extAuthz": {
           "description": "Authorize incoming requests by calling an external authorization service.",
@@ -7316,6 +7364,18 @@
           ],
           "default": null
         },
+        "proxy": {
+          "description": "Enable downstream PROXY protocol handling on this gateway or port, including\nversion matching and whether PROXY headers are required or optional.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Proxy"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "proxyProtocol": {
           "description": "Enable downstream PROXY protocol handling on this gateway or port, including\nversion matching and whether PROXY headers are required or optional.",
           "anyOf": [
@@ -7352,6 +7412,18 @@
           ],
           "default": null
         },
+        "logging": {
+          "description": "Settings for request access logs.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LoggingPolicy"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
         "tracing": {
           "description": "Settings for exporting request traces.",
           "anyOf": [
@@ -7365,7 +7437,25 @@
           "default": null
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "not": {
+            "required": [
+              "proxy",
+              "proxyProtocol"
+            ]
+          }
+        },
+        {
+          "not": {
+            "required": [
+              "accessLog",
+              "logging"
+            ]
+          }
+        }
+      ]
     },
     "HTTP2": {
       "type": "object",
@@ -7716,12 +7806,6 @@
       "unevaluatedProperties": false,
       "oneOf": [
         {
-          "type": "string",
-          "enum": [
-            "invalid"
-          ]
-        },
-        {
           "description": "Service reference. Service must be defined in the top level services list.",
           "type": "object",
           "properties": {
@@ -7853,12 +7937,6 @@
       },
       "unevaluatedProperties": false,
       "oneOf": [
-        {
-          "type": "string",
-          "enum": [
-            "invalid"
-          ]
-        },
         {
           "description": "Service reference. Service must be defined in the top level services list.",
           "type": "object",
@@ -8295,6 +8373,13 @@
             "$ref": "#/$defs/LocalLLMModels"
           }
         },
+        "virtualModels": {
+          "description": "virtualModels defines a set of models that can be served from the gateway. The model name refers to the\nmodel in the users request that is matched. However, unlike the `models` field, virtual models will\ndynamically route to a specific model (configured in `models`) based on the configured logic.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/LocalLLMVirtualModel"
+          }
+        },
         "policies": {
           "description": "policies defines policies for handling incoming requests, before a model is selected",
           "anyOf": [
@@ -8319,6 +8404,10 @@
           "description": "name is the name of the model we are matching from a users request. If params.model is set, that\nwill be used in the request to the LLM provider. If not, the incoming model is used.",
           "type": "string"
         },
+        "visibility": {
+          "description": "visibility controls whether clients can request this model directly (rather than only via a `virtualModel`).",
+          "$ref": "#/$defs/ModelVisibility"
+        },
         "params": {
           "description": "params customizes parameters for the outgoing request",
           "$ref": "#/$defs/LocalLLMParams"
@@ -8332,6 +8421,17 @@
           "anyOf": [
             {
               "$ref": "#/$defs/LocalLLMPassthrough"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "authorization": {
+          "description": "authorization configures HTTP authorization rules for requests to this model.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Authorization"
             },
             {
               "type": "null"
@@ -8387,6 +8487,17 @@
             }
           ],
           "default": null
+        },
+        "backendTLS": {
+          "description": "tls configures TLS when connecting to the LLM provider.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LocalBackendTLS"
+            },
+            {
+              "type": "null"
+            }
+          ]
         },
         "tls": {
           "description": "tls configures TLS when connecting to the LLM provider.",
@@ -8468,6 +8579,30 @@
       "required": [
         "name",
         "provider"
+      ],
+      "allOf": [
+        {
+          "not": {
+            "required": [
+              "backendTLS",
+              "tls"
+            ]
+          }
+        }
+      ]
+    },
+    "ModelVisibility": {
+      "oneOf": [
+        {
+          "description": "Public models can be requested directly by clients and are included in the model list.",
+          "type": "string",
+          "const": "public"
+        },
+        {
+          "description": "Internal models can be targeted by virtual models but cannot be requested directly.",
+          "type": "string",
+          "const": "internal"
+        }
       ]
     },
     "LocalLLMParams": {
@@ -8593,13 +8728,27 @@
         {
           "type": "string",
           "enum": [
+            "openai",
             "openAI",
             "gemini",
             "vertex",
             "anthropic",
             "bedrock",
             "azure",
-            "copilot"
+            "copilot",
+            "cohere",
+            "ollama",
+            "baseten",
+            "cerebras",
+            "deepinfra",
+            "deepseek",
+            "groq",
+            "huggingface",
+            "mistral",
+            "openrouter",
+            "togetherai",
+            "xai",
+            "fireworks"
           ]
         },
         {
@@ -8642,6 +8791,175 @@
       },
       "additionalProperties": false
     },
+    "LocalLLMVirtualModel": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "description": "name is the public model name clients request.",
+          "type": "string"
+        },
+        "routing": {
+          "description": "routing selects an existing LLM model backend for each request.",
+          "$ref": "#/$defs/LocalLLMVirtualModelRouting"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "name",
+        "routing"
+      ]
+    },
+    "LocalLLMVirtualModelRouting": {
+      "type": "object",
+      "properties": {
+        "weighted": {
+          "description": "weighted enables weight-based selection of the target model.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LocalLLMWeightedRouting"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "failover": {
+          "description": "failover enables priority-based selection of the target model.\nWithin a priority level, the best provider is selected by a composite score factoring in health\nand latency.\nIf all models within a priority level are degraded, requests will move onto the next priority group.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LocalLLMFailoverRouting"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        },
+        "conditional": {
+          "description": "Conditional enables condition-based selection of the target model. Each condition is evaluated\nin order until the best match is found.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/LocalLLMConditionalRouting"
+            },
+            {
+              "type": "null"
+            }
+          ]
+        }
+      },
+      "additionalProperties": false
+    },
+    "LocalLLMWeightedRouting": {
+      "type": "object",
+      "properties": {
+        "targets": {
+          "description": "targets are existing model names or names matched by wildcard model entries.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/LocalLLMWeightedTarget"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "targets"
+      ]
+    },
+    "LocalLLMWeightedTarget": {
+      "type": "object",
+      "properties": {
+        "model": {
+          "description": "model is resolved against llm.models using the same wildcard matching as client requests.",
+          "type": "string"
+        },
+        "weight": {
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0,
+          "default": 1
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "model"
+      ]
+    },
+    "LocalLLMFailoverRouting": {
+      "type": "object",
+      "properties": {
+        "targets": {
+          "description": "targets are grouped by priority. Lower priority values are tried first.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/LocalLLMFailoverTarget"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "targets"
+      ]
+    },
+    "LocalLLMFailoverTarget": {
+      "type": "object",
+      "properties": {
+        "model": {
+          "description": "model is resolved against llm.models using the same wildcard matching as client requests.",
+          "type": "string"
+        },
+        "priority": {
+          "description": "priority groups targets for failover. Lower values are preferred.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "model",
+        "priority"
+      ]
+    },
+    "LocalLLMConditionalRouting": {
+      "type": "object",
+      "properties": {
+        "targets": {
+          "description": "targets are evaluated in order. The first matching condition selects the model.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/LocalLLMConditionalTarget"
+          }
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "targets"
+      ]
+    },
+    "LocalLLMConditionalTarget": {
+      "type": "object",
+      "properties": {
+        "when": {
+          "description": "when must evaluate to true for this target to be selected. Omit only on the final fallback target.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Expression"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "model": {
+          "description": "model is resolved against llm.models using the same wildcard matching as client requests.",
+          "type": "string"
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "model"
+      ]
+    },
     "LocalLLMPolicy": {
       "type": "object",
       "properties": {
@@ -8666,6 +8984,18 @@
               "type": "null"
             }
           ]
+        },
+        "authorization": {
+          "description": "Authorization rules for incoming HTTP requests.",
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Authorization"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
         },
         "extAuthz": {
           "description": "Authorize incoming requests by calling an external authorization service.",
@@ -8734,17 +9064,16 @@
             }
           ]
         },
-        "authorization": {
-          "description": "Authorization rules for incoming HTTP requests.",
+        "guardrails": {
+          "description": "Guardrails to apply to every configured model.",
           "anyOf": [
             {
-              "$ref": "#/$defs/Authorization"
+              "$ref": "#/$defs/PromptGuard"
             },
             {
               "type": "null"
             }
-          ],
-          "default": null
+          ]
         },
         "localRateLimit": {
           "description": "Local rate limits for incoming requests.",
