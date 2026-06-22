@@ -3579,7 +3579,6 @@ type Backend_Aws struct {
 }
 
 type Backend_Guardrail struct {
-	// Not yet implemented. Reserved for a future release.
 	Guardrail *GuardrailBackend `protobuf:"bytes,9,opt,name=guardrail,proto3,oneof"`
 }
 
@@ -12540,9 +12539,13 @@ func (x *BackendPolicySpec_Ai_Webhook) GetFailureMode() BackendPolicySpec_Ai_Web
 type BackendPolicySpec_Ai_Moderation struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// Model to use. Defaults to `omni-moderation-latest`
-	Model          *string              `protobuf:"bytes,1,opt,name=model,proto3,oneof" json:"model,omitempty"`
+	Model *string `protobuf:"bytes,1,opt,name=model,proto3,oneof" json:"model,omitempty"`
+	// Policies (auth, TLS, timeouts) for the outbound moderation call.
+	// Mutually exclusive with backend_ref; when backend_ref is set, attach policies to the
+	// GuardrailBackend resource instead.
 	InlinePolicies []*BackendPolicySpec `protobuf:"bytes,2,rep,name=inline_policies,json=inlinePolicies,proto3" json:"inline_policies,omitempty"`
-	// Not yet implemented. Reserved for a future release.
+	// Reference to a GuardrailBackend with an openai_moderation provider.
+	// Mutually exclusive with inline_policies.
 	BackendRef    *BackendReference `protobuf:"bytes,3,opt,name=backend_ref,json=backendRef,proto3" json:"backend_ref,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -12600,13 +12603,20 @@ func (x *BackendPolicySpec_Ai_Moderation) GetBackendRef() *BackendReference {
 }
 
 type BackendPolicySpec_Ai_BedrockGuardrails struct {
-	state      protoimpl.MessageState `protogen:"open.v1"`
-	Identifier string                 `protobuf:"bytes,1,opt,name=identifier,proto3" json:"identifier,omitempty"`
-	Version    string                 `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Deprecated: set identifier on a GuardrailBackend with a bedrock provider and reference it via backend_ref.
+	Identifier string `protobuf:"bytes,1,opt,name=identifier,proto3" json:"identifier,omitempty"`
+	// Deprecated: set version on a GuardrailBackend with a bedrock provider and reference it via backend_ref.
+	Version string `protobuf:"bytes,2,opt,name=version,proto3" json:"version,omitempty"`
+	// Deprecated: set region on a GuardrailBackend with a bedrock provider and reference it via backend_ref.
 	// AWS region where the guardrail is deployed (e.g., "us-west-2")
-	Region         string               `protobuf:"bytes,3,opt,name=region,proto3" json:"region,omitempty"`
+	Region string `protobuf:"bytes,3,opt,name=region,proto3" json:"region,omitempty"`
+	// Policies (auth, TLS, timeouts) for the outbound guardrail call.
+	// Mutually exclusive with backend_ref; when backend_ref is set, attach policies to the
+	// GuardrailBackend resource instead.
 	InlinePolicies []*BackendPolicySpec `protobuf:"bytes,4,rep,name=inline_policies,json=inlinePolicies,proto3" json:"inline_policies,omitempty"`
-	// Not yet implemented. Reserved for a future release.
+	// Reference to a GuardrailBackend with a bedrock provider.
+	// Mutually exclusive with the inline provider fields (identifier, version, region) above.
 	BackendRef    *BackendReference `protobuf:"bytes,5,opt,name=backend_ref,json=backendRef,proto3" json:"backend_ref,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -12678,13 +12688,20 @@ func (x *BackendPolicySpec_Ai_BedrockGuardrails) GetBackendRef() *BackendReferen
 }
 
 type BackendPolicySpec_Ai_GoogleModelArmor struct {
-	state      protoimpl.MessageState `protogen:"open.v1"`
-	TemplateId string                 `protobuf:"bytes,1,opt,name=template_id,json=templateId,proto3" json:"template_id,omitempty"`
-	ProjectId  string                 `protobuf:"bytes,2,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Deprecated: set template_id on a GuardrailBackend with a google_model_armor provider and reference it via backend_ref.
+	TemplateId string `protobuf:"bytes,1,opt,name=template_id,json=templateId,proto3" json:"template_id,omitempty"`
+	// Deprecated: set project_id on a GuardrailBackend with a google_model_armor provider and reference it via backend_ref.
+	ProjectId string `protobuf:"bytes,2,opt,name=project_id,json=projectId,proto3" json:"project_id,omitempty"`
+	// Deprecated: set location on a GuardrailBackend with a google_model_armor provider and reference it via backend_ref.
 	// default: us-central1
-	Location       *string              `protobuf:"bytes,3,opt,name=location,proto3,oneof" json:"location,omitempty"`
+	Location *string `protobuf:"bytes,3,opt,name=location,proto3,oneof" json:"location,omitempty"`
+	// Policies (auth, TLS, timeouts) for the outbound guardrail call.
+	// Mutually exclusive with backend_ref; when backend_ref is set, attach policies to the
+	// GuardrailBackend resource instead.
 	InlinePolicies []*BackendPolicySpec `protobuf:"bytes,4,rep,name=inline_policies,json=inlinePolicies,proto3" json:"inline_policies,omitempty"`
-	// Not yet implemented. Reserved for a future release.
+	// Reference to a GuardrailBackend with a google_model_armor provider.
+	// Mutually exclusive with the inline provider fields (template_id, project_id, location) above.
 	BackendRef    *BackendReference `protobuf:"bytes,5,opt,name=backend_ref,json=backendRef,proto3" json:"backend_ref,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -12758,6 +12775,7 @@ func (x *BackendPolicySpec_Ai_GoogleModelArmor) GetBackendRef() *BackendReferenc
 type BackendPolicySpec_Ai_AzureContentSafety struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
 	// The Azure Content Safety endpoint URL (e.g., "https://<resource-name>.cognitiveservices.azure.com")
+	// Deprecated: set endpoint or resource_name on a GuardrailBackend with an azure_content_safety provider and reference it via backend_ref.
 	Endpoint string `protobuf:"bytes,1,opt,name=endpoint,proto3" json:"endpoint,omitempty"`
 	// Severity threshold (0-6). Content at or above this level is blocked. Default: 2.
 	SeverityThreshold *int32 `protobuf:"varint,2,opt,name=severity_threshold,json=severityThreshold,proto3,oneof" json:"severity_threshold,omitempty"`
@@ -12766,9 +12784,13 @@ type BackendPolicySpec_Ai_AzureContentSafety struct {
 	// Blocklist names to check against
 	BlocklistNames []string `protobuf:"bytes,4,rep,name=blocklist_names,json=blocklistNames,proto3" json:"blocklist_names,omitempty"`
 	// When true, further analysis stops if a blocklist is hit
-	HaltOnBlocklistHit *bool                `protobuf:"varint,5,opt,name=halt_on_blocklist_hit,json=haltOnBlocklistHit,proto3,oneof" json:"halt_on_blocklist_hit,omitempty"`
-	InlinePolicies     []*BackendPolicySpec `protobuf:"bytes,6,rep,name=inline_policies,json=inlinePolicies,proto3" json:"inline_policies,omitempty"`
-	// Not yet implemented. Reserved for a future release.
+	HaltOnBlocklistHit *bool `protobuf:"varint,5,opt,name=halt_on_blocklist_hit,json=haltOnBlocklistHit,proto3,oneof" json:"halt_on_blocklist_hit,omitempty"`
+	// Policies (auth, TLS, timeouts) for the outbound guardrail call.
+	// Mutually exclusive with backend_ref; when backend_ref is set, attach policies to the
+	// GuardrailBackend resource instead.
+	InlinePolicies []*BackendPolicySpec `protobuf:"bytes,6,rep,name=inline_policies,json=inlinePolicies,proto3" json:"inline_policies,omitempty"`
+	// Reference to a GuardrailBackend with an azure_content_safety provider.
+	// Mutually exclusive with endpoint (inline provider fields) above.
 	BackendRef    *BackendReference `protobuf:"bytes,7,opt,name=backend_ref,json=backendRef,proto3" json:"backend_ref,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -14069,11 +14091,12 @@ func (x *AIBackend_ProviderFormatConfig) GetPath() string {
 }
 
 type AIBackend_Custom struct {
-	state         protoimpl.MessageState            `protogen:"open.v1"`
-	Formats       []*AIBackend_ProviderFormatConfig `protobuf:"bytes,1,rep,name=formats,proto3" json:"formats,omitempty"`
-	Model         *string                           `protobuf:"bytes,2,opt,name=model,proto3,oneof" json:"model,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state            protoimpl.MessageState            `protogen:"open.v1"`
+	Formats          []*AIBackend_ProviderFormatConfig `protobuf:"bytes,1,rep,name=formats,proto3" json:"formats,omitempty"`
+	Model            *string                           `protobuf:"bytes,2,opt,name=model,proto3,oneof" json:"model,omitempty"`
+	ProviderOverride *string                           `protobuf:"bytes,3,opt,name=provider_override,json=providerOverride,proto3,oneof" json:"provider_override,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *AIBackend_Custom) Reset() {
@@ -14116,6 +14139,13 @@ func (x *AIBackend_Custom) GetFormats() []*AIBackend_ProviderFormatConfig {
 func (x *AIBackend_Custom) GetModel() string {
 	if x != nil && x.Model != nil {
 		return *x.Model
+	}
+	return ""
+}
+
+func (x *AIBackend_Custom) GetProviderOverride() string {
+	if x != nil && x.ProviderOverride != nil {
+		return *x.ProviderOverride
 	}
 	return ""
 }
@@ -15511,7 +15541,7 @@ const file_resource_proto_rawDesc = "" +
 	"\x11agent_runtime_arn\x18\x01 \x01(\tR\x0fagentRuntimeArn\x12!\n" +
 	"\tqualifier\x18\x02 \x01(\tH\x00R\tqualifier\x88\x01\x01B\f\n" +
 	"\n" +
-	"_qualifier\"\x87\x15\n" +
+	"_qualifier\"\xcf\x15\n" +
 	"\tAIBackend\x12[\n" +
 	"\x0fprovider_groups\x18\x01 \x03(\v22.agentgateway.dev.resource.AIBackend.ProviderGroupR\x0eproviderGroups\x1a6\n" +
 	"\fHostOverride\x12\x12\n" +
@@ -15562,11 +15592,13 @@ const file_resource_proto_rawDesc = "" +
 	"\x14ProviderFormatConfig\x12K\n" +
 	"\x06format\x18\x01 \x01(\x0e23.agentgateway.dev.resource.AIBackend.ProviderFormatR\x06format\x12\x17\n" +
 	"\x04path\x18\x02 \x01(\tH\x00R\x04path\x88\x01\x01B\a\n" +
-	"\x05_path\x1a\x82\x01\n" +
+	"\x05_path\x1a\xca\x01\n" +
 	"\x06Custom\x12S\n" +
 	"\aformats\x18\x01 \x03(\v29.agentgateway.dev.resource.AIBackend.ProviderFormatConfigR\aformats\x12\x19\n" +
-	"\x05model\x18\x02 \x01(\tH\x00R\x05model\x88\x01\x01B\b\n" +
-	"\x06_model\x1a\xf3\a\n" +
+	"\x05model\x18\x02 \x01(\tH\x00R\x05model\x88\x01\x01\x120\n" +
+	"\x11provider_override\x18\x03 \x01(\tH\x01R\x10providerOverride\x88\x01\x01B\b\n" +
+	"\x06_modelB\x14\n" +
+	"\x12_provider_override\x1a\xf3\a\n" +
 	"\bProvider\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12V\n" +
 	"\rhost_override\x18\x02 \x01(\v21.agentgateway.dev.resource.AIBackend.HostOverrideR\fhostOverride\x12(\n" +

@@ -9,7 +9,6 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use ::http::Uri;
 use agent_core::prelude::Strng;
 use anyhow::{Context, Error, anyhow, bail};
-use frozen_collections::Len;
 use itertools::Itertools;
 use macro_rules_attribute::apply;
 use secrecy::SecretString;
@@ -294,6 +293,9 @@ pub struct LocalLLMConfig {
 	port: Option<u16>,
 	#[serde(default, skip_serializing_if = "Option::is_none")]
 	tls: Option<LocalTLSServerConfig>,
+	/// providers defines reusable LLM provider defaults that models may reference.
+	#[serde(default, skip_serializing_if = "Vec::is_empty")]
+	providers: Vec<LocalLLMProvider>,
 	/// models defines the set of models that can be served by this gateway. The model name refers to the
 	/// model in the users request that is matched; the model sent to the actual LLM can be overridden
 	/// on a per-model basis.
@@ -310,6 +312,45 @@ pub struct LocalLLMConfig {
 	/// policies defines policies for handling incoming requests, before a model is selected
 	#[serde(default, skip_serializing_if = "Option::is_none")]
 	policies: Option<LocalLLMPolicy>,
+}
+
+#[apply(schema_de!)]
+pub struct LocalLLMProvider {
+	/// name is referenced from llm.models[].provider.reference.
+	name: Strng,
+	/// params customizes parameters for outgoing requests that use this provider.
+	#[serde(default)]
+	params: LocalLLMParams,
+	/// provider of the LLM we are connecting to.
+	provider: LocalModelAIProvider,
+	/// defaults defines provider-level policy defaults. Model-level policy fields override these.
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	defaults: Option<LocalLLMProviderDefaults>,
+}
+
+#[apply(schema_de!)]
+#[derive(Default)]
+pub struct LocalLLMProviderDefaults {
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	defaults: Option<HashMap<String, serde_json::Value>>,
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	overrides: Option<HashMap<String, serde_json::Value>>,
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	transformation: Option<HashMap<String, Arc<cel::Expression>>>,
+	#[serde(default)]
+	request_headers: Option<filters::HeaderModifier>,
+	#[serde(default)]
+	response_headers: Option<filters::HeaderModifier>,
+	#[serde(rename = "tls", alias = "backendTLS", default)]
+	backend_tls: Option<http::backendtls::LocalBackendTLS>,
+	#[serde(default, deserialize_with = "de_backend_auth")]
+	auth: Option<BackendAuth>,
+	#[serde(default)]
+	health: Option<health::LocalHealthPolicy>,
+	#[serde(default)]
+	backend_tunnel: Option<backend::Tunnel>,
+	#[serde(default, skip_serializing_if = "Option::is_none")]
+	prompt_caching: Option<PromptCachingConfig>,
 }
 
 #[apply(schema_de!)]
@@ -653,7 +694,9 @@ pub struct LLMRouteMatch {
 #[serde(rename_all = "lowercase", deny_unknown_fields)]
 #[cfg_attr(feature = "schema", derive(schemars::JsonSchema))]
 pub enum LocalModelAIProvider {
-	#[serde(alias = "openAI")]
+	#[serde(rename = "reference")]
+	Reference(Strng),
+	#[serde(rename = "openai", alias = "openAI")]
 	OpenAI,
 	Gemini,
 	Vertex,
@@ -734,6 +777,58 @@ pub struct LocalLLMParams {
 }
 
 impl LocalLLMModels {
+	#[allow(deprecated)]
+	fn apply_provider_reference(&mut self, provider: &LocalLLMProvider) -> anyhow::Result<()> {
+		let LocalLLMParams {
+			model: model_override,
+			api_key: None,
+			aws_region: None,
+			vertex_region: None,
+			vertex_project: None,
+			azure_resource_name: None,
+			azure_resource_type: None,
+			azure_api_version: None,
+			azure_project_name: None,
+			base_url: None,
+			host_override: None,
+			path_override: None,
+			path_prefix: None,
+			tokenize: false,
+		} = std::mem::take(&mut self.params)
+		else {
+			bail!(
+				"model {} references provider {} and can only set params.model",
+				self.name,
+				provider.name
+			);
+		};
+		if matches!(&provider.provider, LocalModelAIProvider::Reference(_)) {
+			bail!(
+				"llm.providers.{} cannot reference another provider",
+				provider.name
+			);
+		}
+		self.params = provider.params.clone();
+		if let Some(model_override) = model_override {
+			self.params.model = Some(model_override);
+		}
+		self.provider = provider.provider.clone();
+		if let Some(defaults) = provider.defaults.clone() {
+			self.defaults = merge_optional_maps(defaults.defaults, self.defaults.take());
+			self.overrides = merge_optional_maps(defaults.overrides, self.overrides.take());
+			self.transformation =
+				merge_optional_maps(defaults.transformation, self.transformation.take());
+			self.request_headers = self.request_headers.take().or(defaults.request_headers);
+			self.response_headers = self.response_headers.take().or(defaults.response_headers);
+			self.backend_tls = self.backend_tls.take().or(defaults.backend_tls);
+			self.auth = self.auth.take().or(defaults.auth);
+			self.health = self.health.take().or(defaults.health);
+			self.backend_tunnel = self.backend_tunnel.take().or(defaults.backend_tunnel);
+			self.prompt_caching = self.prompt_caching.take().or(defaults.prompt_caching);
+		}
+		Ok(())
+	}
+
 	#[allow(deprecated)]
 	fn apply_provider_defaults(&mut self) {
 		if self.params.base_url.is_some()
@@ -856,6 +951,21 @@ impl LocalLLMModels {
 			self.backend_tls = Some(http::backendtls::LocalBackendTLS::default());
 		}
 		Ok(())
+	}
+}
+
+fn merge_optional_maps<T>(
+	base: Option<HashMap<String, T>>,
+	overrides: Option<HashMap<String, T>>,
+) -> Option<HashMap<String, T>> {
+	match (base, overrides) {
+		(None, None) => None,
+		(Some(base), None) => Some(base),
+		(None, Some(overrides)) => Some(overrides),
+		(Some(mut base), Some(overrides)) => {
+			base.extend(overrides);
+			Some(base)
+		},
 	}
 }
 
@@ -2205,6 +2315,7 @@ async fn convert(
 			| Backend::MCP(n, _)
 			| Backend::AI(n, _)
 			| Backend::Aws(n, _)
+			| Backend::Guardrail(n, _)
 			| Backend::Dynamic(n, _) => n == &name,
 			Backend::Service(_, _) | Backend::Invalid => false,
 		}) {
@@ -2579,6 +2690,7 @@ async fn convert_llm_config(
 	let LocalLLMConfig {
 		port,
 		tls,
+		providers,
 		models,
 		virtual_models,
 		policies,
@@ -2643,10 +2755,28 @@ async fn convert_llm_config(
 	let ordered_models = llm_registry.ordered_models();
 	let mut resolved_models = ResolvedLLMModelRegistry::new();
 	let mut router_models = Vec::new();
+	let mut providers_by_name = HashMap::new();
+	for provider in providers {
+		if providers_by_name
+			.insert(provider.name.clone(), provider)
+			.is_some()
+		{
+			bail!("llm.providers contains duplicate provider names");
+		}
+	}
 
 	// Create routes and backends for each model
 	for (idx, (_, model_config)) in ordered_models.into_iter().enumerate() {
 		let mut model_config = model_config;
+		if let LocalModelAIProvider::Reference(reference) = &model_config.provider {
+			let provider = providers_by_name.get(reference).with_context(|| {
+				format!(
+					"model {} references unknown provider {}",
+					model_config.name, reference
+				)
+			})?;
+			model_config.apply_provider_reference(provider)?;
+		}
 		model_config.apply_provider_defaults();
 		model_config.apply_base_url()?;
 		let model_name = strng::new(&model_config.name);
@@ -2658,6 +2788,13 @@ async fn convert_llm_config(
 
 		// Use provider from config and set the model name
 		let provider = match &model_config.provider {
+			LocalModelAIProvider::Reference(reference) => {
+				bail!(
+					"model {} has unresolved provider reference {}",
+					model_config.name,
+					reference
+				)
+			},
 			LocalModelAIProvider::Anthropic => AIProvider::Anthropic(anthropic::Provider { model }),
 			LocalModelAIProvider::OpenAI => AIProvider::OpenAI(openai::Provider { model }),
 			LocalModelAIProvider::Copilot => AIProvider::Copilot(copilot::Provider { model }),
@@ -2682,6 +2819,7 @@ async fn convert_llm_config(
 			},
 			LocalModelAIProvider::Cohere => AIProvider::Custom(custom::Provider {
 				model,
+				provider_override: Some(strng::literal!("cohere")),
 				formats: vec![
 					custom_provider_format(
 						custom::ProviderFormat::Completions,
@@ -2696,6 +2834,7 @@ async fn convert_llm_config(
 			}),
 			LocalModelAIProvider::Ollama => AIProvider::Custom(custom::Provider {
 				model,
+				provider_override: Some(strng::literal!("ollama")),
 				formats: vec![
 					custom_provider_format(custom::ProviderFormat::Completions, None),
 					custom_provider_format(custom::ProviderFormat::Responses, None),
@@ -2704,6 +2843,7 @@ async fn convert_llm_config(
 			}),
 			LocalModelAIProvider::Baseten => AIProvider::Custom(custom::Provider {
 				model,
+				provider_override: Some(strng::literal!("baseten")),
 				formats: vec![
 					custom_provider_format(custom::ProviderFormat::Completions, None),
 					custom_provider_format(custom::ProviderFormat::Messages, None),
@@ -2711,6 +2851,7 @@ async fn convert_llm_config(
 			}),
 			LocalModelAIProvider::Cerebras => AIProvider::Custom(custom::Provider {
 				model,
+				provider_override: Some(strng::literal!("cerebras")),
 				formats: vec![custom_provider_format(
 					custom::ProviderFormat::Completions,
 					None,
@@ -2718,6 +2859,7 @@ async fn convert_llm_config(
 			}),
 			LocalModelAIProvider::Deepinfra => AIProvider::Custom(custom::Provider {
 				model,
+				provider_override: Some(strng::literal!("deepinfra")),
 				formats: vec![
 					custom_provider_format(custom::ProviderFormat::Completions, None),
 					custom_provider_format(
@@ -2729,6 +2871,7 @@ async fn convert_llm_config(
 			}),
 			LocalModelAIProvider::Deepseek => AIProvider::Custom(custom::Provider {
 				model,
+				provider_override: Some(strng::literal!("deepseek")),
 				formats: vec![
 					custom_provider_format(custom::ProviderFormat::Completions, None),
 					custom_provider_format(
@@ -2739,6 +2882,7 @@ async fn convert_llm_config(
 			}),
 			LocalModelAIProvider::Groq => AIProvider::Custom(custom::Provider {
 				model,
+				provider_override: Some(strng::literal!("groq")),
 				formats: vec![
 					custom_provider_format(custom::ProviderFormat::Completions, None),
 					custom_provider_format(custom::ProviderFormat::Responses, None),
@@ -2746,6 +2890,7 @@ async fn convert_llm_config(
 			}),
 			LocalModelAIProvider::Huggingface => AIProvider::Custom(custom::Provider {
 				model,
+				provider_override: Some(strng::literal!("huggingface")),
 				formats: vec![
 					custom_provider_format(custom::ProviderFormat::Completions, None),
 					custom_provider_format(custom::ProviderFormat::Responses, None),
@@ -2753,6 +2898,7 @@ async fn convert_llm_config(
 			}),
 			LocalModelAIProvider::Mistral => AIProvider::Custom(custom::Provider {
 				model,
+				provider_override: Some(strng::literal!("mistral")),
 				formats: vec![
 					custom_provider_format(custom::ProviderFormat::Completions, None),
 					custom_provider_format(custom::ProviderFormat::Embeddings, None),
@@ -2760,6 +2906,7 @@ async fn convert_llm_config(
 			}),
 			LocalModelAIProvider::Openrouter => AIProvider::Custom(custom::Provider {
 				model,
+				provider_override: Some(strng::literal!("openrouter")),
 				formats: vec![
 					custom_provider_format(custom::ProviderFormat::Completions, None),
 					custom_provider_format(custom::ProviderFormat::Messages, None),
@@ -2770,6 +2917,7 @@ async fn convert_llm_config(
 			}),
 			LocalModelAIProvider::Togetherai => AIProvider::Custom(custom::Provider {
 				model,
+				provider_override: Some(strng::literal!("togetherai")),
 				formats: vec![
 					custom_provider_format(custom::ProviderFormat::Completions, None),
 					custom_provider_format(custom::ProviderFormat::Embeddings, None),
@@ -2778,6 +2926,7 @@ async fn convert_llm_config(
 			}),
 			LocalModelAIProvider::XAI => AIProvider::Custom(custom::Provider {
 				model,
+				provider_override: Some(strng::literal!("xai")),
 				formats: vec![
 					custom_provider_format(custom::ProviderFormat::Completions, None),
 					custom_provider_format(custom::ProviderFormat::Responses, None),
@@ -2786,6 +2935,7 @@ async fn convert_llm_config(
 			}),
 			LocalModelAIProvider::Fireworks => AIProvider::Custom(custom::Provider {
 				model,
+				provider_override: Some(strng::literal!("fireworks")),
 				formats: vec![
 					custom_provider_format(custom::ProviderFormat::Completions, None),
 					custom_provider_format(custom::ProviderFormat::Messages, None),
