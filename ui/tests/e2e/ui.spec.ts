@@ -746,3 +746,86 @@ function trafficBaseConfig() {
   ];
   return config;
 }
+
+type PostedBackendAuth = {
+  binds?: Array<{
+    listeners: Array<{
+      routes?: Array<{
+        backends?: Array<{ policies?: { backendAuth?: unknown } }>;
+      }>;
+    }>;
+  }>;
+};
+
+function postedBackendAuth(config: unknown): unknown {
+  return (config as PostedBackendAuth).binds?.[0].listeners[0].routes?.[0]
+    .backends?.[0].policies?.backendAuth;
+}
+
+async function openBackendAuthEditor(page: import("@playwright/test").Page) {
+  await page.goto("/traffic/routes");
+  await page
+    .getByRole("row", { name: /api/ })
+    .getByRole("button", { name: "Edit route" })
+    .click();
+  await page.getByText("Backend policies").click();
+  await page.getByRole("button", { name: /Backend auth/ }).click();
+  return page.locator(".drawer.nested").last();
+}
+
+test("backend auth editor saves a static key policy", async ({ page }) => {
+  const gateway = await mockGateway(page);
+  const editor = await openBackendAuthEditor(page);
+
+  await editor.getByRole("combobox", { name: "Auth method" }).click();
+  await page.getByRole("option", { name: "Static key" }).click();
+  await editor.getByPlaceholder("secret-value").fill("smoke-secret");
+
+  await editor.getByRole("button", { name: "Save", exact: true }).click();
+  // The editor form is dirty (the value is already committed via Save), so
+  // closing prompts to discard the local form state — that is expected here.
+  await editor.getByRole("button", { name: "Close" }).click();
+  await page.getByRole("button", { name: "Discard changes" }).click();
+  await page.getByRole("button", { name: "Save route" }).click();
+
+  await expect.poll(() => gateway.postedConfigs.length).toBe(1);
+  expect(postedBackendAuth(gateway.postedConfigs.at(-1))).toEqual({
+    key: { value: "smoke-secret" },
+  });
+});
+
+test("backend auth editor emits oauthTokenExchange and validates host:port", async ({
+  page,
+}) => {
+  const gateway = await mockGateway(page);
+  const editor = await openBackendAuthEditor(page);
+
+  await editor.getByRole("combobox", { name: "Auth method" }).click();
+  await page.getByRole("option", { name: "OAuth token exchange" }).click();
+
+  // A bare host without a port is rejected client-side.
+  await editor.getByPlaceholder("idp.example.com:443").fill("idp.example.com");
+  await editor.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(
+    editor.getByText(/Token endpoint host must be host:port/),
+  ).toBeVisible();
+  expect(gateway.postedConfigs.length).toBe(0);
+
+  // Fixing the port lets it save, and the emitted key is oauthTokenExchange.
+  // Also set a non-default token endpoint path to guard the `path` wire key.
+  await editor
+    .getByPlaceholder("idp.example.com:443")
+    .fill("idp.example.com:443");
+  await editor.getByPlaceholder(/^\/token/).fill("/token");
+  await editor.getByRole("button", { name: "Save", exact: true }).click();
+  // The editor form is dirty (the value is already committed via Save), so
+  // closing prompts to discard the local form state — that is expected here.
+  await editor.getByRole("button", { name: "Close" }).click();
+  await page.getByRole("button", { name: "Discard changes" }).click();
+  await page.getByRole("button", { name: "Save route" }).click();
+
+  await expect.poll(() => gateway.postedConfigs.length).toBe(1);
+  expect(postedBackendAuth(gateway.postedConfigs.at(-1))).toEqual({
+    oauthTokenExchange: { host: "idp.example.com:443", path: "/token" },
+  });
+});

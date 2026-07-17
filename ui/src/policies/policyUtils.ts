@@ -153,6 +153,23 @@ export function lines(values: string[] | undefined) {
   return values?.join("\n") ?? "";
 }
 
+// Rust's Target::try_from requires "host:port" (or a "unix:" socket path) and
+// rejects a bare hostname — but through the untagged backend-reference enums
+// that surfaces as the generic "did not match any variant" serde error, so
+// editors should catch it client-side with a real message.
+export function hostPortError(host: string, label: string): string | null {
+  const trimmed = host.trim();
+  if (!trimmed || trimmed.startsWith("unix:")) return null;
+  // Mirror Target::try_from: split on the first ':' and parse the remainder as
+  // a u16 (decimal digits only, 0..=65535).
+  const colon = trimmed.indexOf(":");
+  const portStr = colon === -1 ? "" : trimmed.slice(colon + 1);
+  const port = /^\d+$/.test(portStr) ? Number(portStr) : NaN;
+  return Number.isInteger(port) && port >= 0 && port <= 65535
+    ? null
+    : `${label} must be host:port (e.g. example.com:443).`;
+}
+
 export function toText(value: unknown) {
   return typeof value === "string" ? value : JSON.stringify(value, null, 2);
 }
